@@ -1,10 +1,10 @@
-// chobo-vector v1.01
+// chobo-vector v1.02
 //
-// An std::vector-like class with no debug bounds checks which is faster in 
+// An std::vector-like class with no debug bounds checks which is faster in
 // "Debug" mode
 //
 // MIT License:
-// Copyright(c) 2017 Chobolabs Inc.
+// Copyright(c) 2017-2018 Chobolabs Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files(the
@@ -28,6 +28,7 @@
 //
 //                  VERSION HISTORY
 //
+//  1.02 (2018-11-29) Removed references to deprecated std::allocator members
 //  1.01 (2017-04-02) Fixed compilation error on (count, value) constructor and
 //                    assign, and insert methods when count or value is 0
 //  1.00 (2017-03-10) First public release
@@ -39,7 +40,7 @@
 // It defines the class chobo::vector, which is a drop-in replacement of
 // std::vector. Unlike some standard library releases, most notably
 // Dincumware's, it has no debug iterator checks, thus having a much, much
-// better performance in "Debug" mode. 
+// better performance in "Debug" mode.
 //
 //                  TESTS
 //
@@ -59,15 +60,16 @@ namespace chobo
 template<typename T, class Alloc = std::allocator<T>>
 struct vector
 {
+    using atraits = std::allocator_traits<Alloc>;
 public:
     using allocator_type = Alloc;
-    using value_type = typename Alloc::value_type;
-    using size_type = typename Alloc::size_type;
-    using difference_type = typename Alloc::difference_type;
-    using reference = typename Alloc::reference;
-    using const_reference = typename Alloc::const_reference;
-    using pointer = typename Alloc::pointer;
-    using const_pointer = typename Alloc::const_pointer;
+    using value_type = typename atraits::value_type;
+    using size_type = typename atraits::size_type;
+    using difference_type = typename atraits::difference_type;
+    using reference = T & ;
+    using const_reference = const T&;
+    using pointer = typename atraits::pointer;
+    using const_pointer = typename atraits::const_pointer;
     using iterator = pointer;
     using const_iterator = const_pointer;
     using reverse_iterator = std::reverse_iterator<iterator>;
@@ -110,7 +112,7 @@ public:
     }
 
     vector(const vector& v)
-        : vector(v, std::allocator_traits<Alloc>::select_on_container_copy_construction(v.get_allocator()))
+        : vector(v, atraits::select_on_container_copy_construction(v.get_allocator()))
     {}
 
     vector(const vector& v, const Alloc& alloc)
@@ -135,7 +137,7 @@ public:
 
         if (m_begin)
         {
-            m_alloc.deallocate(m_begin, m_capacity);
+            atraits::deallocate(m_alloc, m_begin, m_capacity);
         }
     }
 
@@ -330,13 +332,13 @@ public:
 
         size_type new_cap = find_capacity(desired_capacity);
 
-        auto new_buf = m_alloc.allocate(new_cap);
+        auto new_buf = atraits::allocate(m_alloc, new_cap);
         const auto s = size();
 
         // now we need to transfer the existing elements into the new buffer
         for (size_type i = 0; i < s; ++i)
         {
-            m_alloc.construct(new_buf + i, std::move(*(m_begin + i)));
+            atraits::construct(m_alloc, new_buf + i, std::move(*(m_begin + i)));
         }
 
         if (m_begin)
@@ -344,10 +346,10 @@ public:
             // free old elements
             for (size_type i = 0; i < s; ++i)
             {
-                m_alloc.destroy(m_begin + i);
+                atraits::destroy(m_alloc, m_begin + i);
             }
 
-            m_alloc.deallocate(m_begin, m_capacity);
+            atraits::deallocate(m_alloc, m_begin, m_capacity);
         }
 
         m_begin = new_buf;
@@ -368,27 +370,27 @@ public:
 
         if (s == 0)
         {
-            m_alloc.deallocate(m_begin, m_capacity);
+            atraits::deallocate(m_alloc, m_begin, m_capacity);
             m_capacity = 0;
             m_begin = m_end = nullptr;
             return;
         }
 
-        auto new_buf = m_alloc.allocate(s);
+        auto new_buf = atraits::allocate(m_alloc, s);
 
         // now we need to transfer the existing elements into the new buffer
         for (size_type i = 0; i < s; ++i)
         {
-            m_alloc.construct(new_buf + i, std::move(*(m_begin + i)));
+            atraits::construct(m_alloc, new_buf + i, std::move(*(m_begin + i)));
         }
 
         // free old elements
         for (size_type i = 0; i < s; ++i)
         {
-            m_alloc.destroy(m_begin + i);
+            atraits::destroy(m_alloc, m_begin + i);
         }
 
-        m_alloc.deallocate(m_begin, m_capacity);
+        atraits::deallocate(m_alloc, m_begin, m_capacity);
 
         m_begin = new_buf;
         m_end = new_buf + s;
@@ -400,7 +402,7 @@ public:
     {
         for (auto p = m_begin; p != m_end; ++p)
         {
-            m_alloc.destroy(p);
+            atraits::destroy(m_alloc, p);
         }
 
         m_end = m_begin;
@@ -409,14 +411,14 @@ public:
     iterator insert(const_iterator position, const value_type& val)
     {
         auto pos = grow_at(position, 1);
-        m_alloc.construct(pos, val);
+        atraits::construct(m_alloc, pos, val);
         return pos;
     }
 
     iterator insert(const_iterator position, value_type&& val)
     {
         auto pos = grow_at(position, 1);
-        m_alloc.construct(pos, std::move(val));
+        atraits::construct(m_alloc, pos, std::move(val));
         return pos;
     }
 
@@ -425,7 +427,7 @@ public:
         auto pos = grow_at(position, count);
         for (size_type i = 0; i < count; ++i)
         {
-            m_alloc.construct(pos + i, val);
+            atraits::construct(m_alloc, pos + i, val);
         }
         return pos;
     }
@@ -438,7 +440,7 @@ public:
         auto np = pos;
         for (auto p = first; p != last; ++p, ++np)
         {
-            m_alloc.construct(np, *p);
+            atraits::construct(m_alloc, np, *p);
         }
         return pos;
     }
@@ -449,7 +451,7 @@ public:
         size_type i = 0;
         for (auto& elem : ilist)
         {
-            m_alloc.construct(pos + i, elem);
+            atraits::construct(m_alloc, pos + i, elem);
             ++i;
         }
         return pos;
@@ -459,7 +461,7 @@ public:
     iterator emplace(const_iterator position, Args&&... args)
     {
         auto pos = grow_at(position, 1);
-        m_alloc.construct(pos, std::forward<Args>(args)...);
+        atraits::construct(m_alloc, pos, std::forward<Args>(args)...);
         return pos;
     }
 
@@ -476,20 +478,20 @@ public:
     void push_back(const_reference val)
     {
         auto pos = grow_at(m_end, 1);
-        m_alloc.construct(pos, val);
+        atraits::construct(m_alloc, pos, val);
     }
 
     void push_back(T&& val)
     {
         auto pos = grow_at(m_end, 1);
-        m_alloc.construct(pos, std::move(val));
+        atraits::construct(m_alloc, pos, std::move(val));
     }
 
     template<typename... Args>
     void emplace_back(Args&&... args)
     {
         auto pos = grow_at(m_end, 1);
-        m_alloc.construct(pos, std::forward<Args>(args)...);
+        atraits::construct(m_alloc, pos, std::forward<Args>(args)...);
     }
 
     void pop_back()
@@ -505,12 +507,12 @@ public:
 
             while (m_end > new_end)
             {
-                m_alloc.destroy(--m_end);
+                atraits::destroy(m_alloc, --m_end);
             }
 
             while (new_end > m_end)
             {
-                m_alloc.construct(m_end++, v);
+                atraits::construct(m_alloc, m_end++, v);
             }
         }
         else
@@ -521,7 +523,7 @@ public:
 
             while (new_end > m_end)
             {
-                m_alloc.construct(m_end++, v);
+                atraits::construct(m_alloc, m_end++, v);
             }
         }
     }
@@ -534,12 +536,12 @@ public:
 
             while (m_end > new_end)
             {
-                m_alloc.destroy(--m_end);
+                atraits::destroy(m_alloc, --m_end);
             }
 
             while (new_end > m_end)
             {
-                m_alloc.construct(m_end++);
+                atraits::construct(m_alloc, m_end++);
             }
         }
         else
@@ -550,7 +552,7 @@ public:
 
             while (new_end > m_end)
             {
-                m_alloc.construct(m_end++);
+                atraits::construct(m_alloc, m_end++);
             }
         }
     }
@@ -594,8 +596,8 @@ private:
 
             for (auto p = m_end - num - 1; p >= position; --p)
             {
-                m_alloc.construct(p + num, std::move(*p));
-                m_alloc.destroy(p);
+                atraits::construct(m_alloc, p + num, std::move(*p));
+                atraits::destroy(m_alloc, p);
             }
 
             return position;
@@ -605,7 +607,7 @@ private:
             // we need to transfer the elements into the a buffer
             size_type new_cap = find_capacity(s + num);
 
-            auto new_buf = m_alloc.allocate(new_cap);
+            auto new_buf = atraits::allocate(m_alloc, new_cap);
 
             position = new_buf + (position - m_begin);
 
@@ -614,13 +616,13 @@ private:
 
             for (; np != position; ++p, ++np)
             {
-                m_alloc.construct(np, std::move(*p));
+                atraits::construct(m_alloc, np, std::move(*p));
             }
 
             np += num;
             for (; p != m_end; ++p, ++np)
             {
-                m_alloc.construct(np, std::move(*p));
+                atraits::construct(m_alloc, np, std::move(*p));
             }
 
             // destroy old
@@ -628,12 +630,12 @@ private:
             {
                 for (p = m_begin; p != m_end; ++p)
                 {
-                    m_alloc.destroy(p);
+                    atraits::destroy(m_alloc, p);
                 }
 
-                m_alloc.deallocate(m_begin, m_capacity);
+                atraits::deallocate(m_alloc, m_begin, m_capacity);
             }
-            
+
             m_capacity = new_cap;
             m_begin = new_buf;
             m_end = new_buf + s + num;
@@ -655,16 +657,16 @@ private:
 
         for (auto p = position, np = position + num; np != m_end; ++p, ++np)
         {
-            m_alloc.destroy(p);
-            m_alloc.construct(p, std::move(*np));
+            atraits::destroy(m_alloc, p);
+            atraits::construct(m_alloc, p, std::move(*np));
         }
 
         for (auto p = m_end - num; p != m_end; ++p)
         {
-            m_alloc.destroy(p);
+            atraits::destroy(m_alloc, p);
         }
 
-        m_end -= num; 
+        m_end -= num;
 
         return ++position;
     }
@@ -672,18 +674,16 @@ private:
     // grows buffer only on empty vectors
     void safe_grow(size_t capacity)
     {
-        assert(m_begin == m_end);
-
         if (capacity <= m_capacity)
             return;
 
         if (m_begin)
         {
-            m_alloc.deallocate(m_begin, m_capacity);
+            atraits::deallocate(m_alloc, m_begin, m_capacity);
         }
 
         m_capacity = find_capacity(capacity);
-        m_begin = m_end = m_alloc.allocate(m_capacity);
+        m_begin = m_end = atraits::allocate(m_alloc, m_capacity);
     }
 
     void assign_impl(size_type count, const T& value)
@@ -692,7 +692,7 @@ private:
 
         for (size_type i = 0; i < count; ++i)
         {
-            m_alloc.construct(m_end, value);
+            atraits::construct(m_alloc, m_end, value);
             ++m_end;
         }
     }
@@ -705,7 +705,7 @@ private:
 
         for (auto p = first; p != last; ++p)
         {
-            m_alloc.construct(m_end, *p);
+            atraits::construct(m_alloc, m_end, *p);
             ++m_end;
         }
     }
@@ -716,11 +716,11 @@ private:
 
         for (auto& elem : ilist)
         {
-            m_alloc.construct(m_end, elem);
+            atraits::construct(m_alloc, m_end, elem);
             ++m_end;
         }
     }
-    
+
     pointer m_begin;
     pointer m_end;
 
@@ -771,8 +771,8 @@ bool operator!=(const vector<T, Alloc>& a, const vector<T, Alloc>& b)
 #include <string>
 #include <utility>
 
-namespace chobo_vector_test
-{
+#if !defined(CHOBO_TEST_COUNTING_ALLOCATOR)
+#define CHOBO_TEST_COUNTING_ALLOCATOR 1
 
 size_t allocations = 0;
 size_t deallocations = 0;
@@ -784,43 +784,59 @@ size_t destructions = 0;
 template <typename T>
 class counting_allocator : public std::allocator<T>
 {
-public:
-    typedef std::allocator<T> super;
+};
 
-    T* allocate(size_t n, std::allocator<void>::const_pointer hint = 0)
+namespace std
+{
+
+template <typename T>
+class allocator_traits<counting_allocator<T>> /* hacky */ : public allocator_traits<std::allocator<T>>
+{
+public:
+    typedef std::allocator_traits<std::allocator<T>> super;
+    typedef counting_allocator<T> Alloc;
+
+    static T* allocate(Alloc& a, size_t n, typename std::allocator_traits<super>::const_pointer hint = 0)
     {
         ++allocations;
         allocated_bytes += n * sizeof(T);
-        return super::allocate(n, hint);
+        return super::allocate(a, n, hint);
     }
 
-    void deallocate(T* p, size_t n)
+    static void deallocate(Alloc& a, T* p, size_t n)
     {
         ++deallocations;
         deallocated_bytes += n * sizeof(T);
-        return super::deallocate(p, n);
+        return super::deallocate(a, p, n);
     }
 
     template< class U, class... Args >
-    void construct(U* p, Args&&... args)
+    static void construct(Alloc& a, U* p, Args&&... args)
     {
         ++constructions;
-        return super::construct(p, std::forward<Args>(args)...);
+        return super::construct(a, p, std::forward<Args>(args)...);
     }
 
     template< class U >
-    void destroy(U* p)
+    static void destroy(Alloc& a, U* p)
     {
         ++destructions;
-        return super::destroy(p);
+        return super::destroy(a, p);
+    }
+
+    static Alloc select_on_container_copy_construction(const Alloc& a)
+    {
+        return a;
     }
 };
+
 }
+
+#endif
 
 TEST_CASE("[vector] test")
 {
     using namespace chobo;
-    using namespace chobo_vector_test;
     {
         vector<int, counting_allocator<int>> ivec;
         CHECK(ivec.size() == 0);
@@ -1003,7 +1019,7 @@ TEST_CASE("[vector] test")
         CHECK(nullptr_test.size() == 3);
         CHECK(nullptr_test.front() == 0);
         CHECK(nullptr_test.back() == 0);
-        
+
         nullptr_test.insert(nullptr_test.begin(), 1, 0);
         CHECK(nullptr_test.size() == 4);
         CHECK(nullptr_test.front() == 0);
