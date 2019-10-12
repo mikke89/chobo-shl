@@ -15,6 +15,11 @@
 #define CHOBO_FLAT_MAP_TEST_VECTOR_PTR_WITH_DOCTEST
 #include "chobo/flat_map.hpp"
 
+#define CHOBO_FLAT_SET_TEST_WITH_DOCTEST
+#define CHOBO_FLAT_SET_TEST_STATIC_VECTOR_WITH_DOCTEST
+#define CHOBO_FLAT_SET_TEST_VECTOR_PTR_WITH_DOCTEST
+#include "chobo/flat_set.hpp"
+
 #define CHOBO_VECTOR_VIEW_TEST_WITH_DOCTEST
 #include "chobo/vector_view.hpp"
 
