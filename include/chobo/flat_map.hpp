@@ -155,6 +155,13 @@ public:
     flat_map(const flat_map& x) = default;
     flat_map(flat_map&& x) = default;
 
+    flat_map(std::initializer_list<value_type> ilist) : m_cmp(Compare())
+    {
+        m_container.reserve(ilist.size());
+        for (auto&& il : ilist)
+            emplace(il);
+    }
+
     flat_map& operator=(const flat_map& x)
     {
         m_cmp = x.m_cmp;
