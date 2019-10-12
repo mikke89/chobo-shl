@@ -242,7 +242,7 @@ public:
         return insert(std::move(val));
     }
 
-    iterator erase(iterator pos)
+    iterator erase(const_iterator pos)
     {
         return m_container.erase(pos);
     }
